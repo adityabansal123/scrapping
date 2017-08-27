@@ -1,0 +1,269 @@
+Three basic facts about HTML in order to get started with web scraping:
+  
+  * HTML consists of tags
+      HTML contains the text, along with "tags" (specified using angle brackets) that "mark up" the text.
+  * Tags can have attributes
+      HTML tags can have "attributes", which are specified in the opening tag. For example, <span class="short-desc">.
+      For the purpose of web scraping,we don't actually need to understand the meaning of <span>, class, or short-desc.
+      Instead,we just need to recognize that tags can have attributes, and that they are specified in this particular way.
+  * Tags can be nested
+      Eg Hello <strong><em>Data School</em> students</strong>
+      The text Data School students would be bold, because all of that text is between the opening <strong> tag and 
+      the closing </strong> tag. The text Data School would also be in italics, because the <em> tag means "use italics". 
+      The text "Hello" would not be bold or italics, because it's not within either the <strong> or <em> tags.
+      
+READING THE WEBPAGE INTO PYTHON
+      The first thing we need to do is to read the HTML into Python, which we'll do using the requests library.
+                                        import requests
+                                        r = requests.get('https://www.nytimes.com/interactive/2017/06/23/opinion/trumps-lies.html')
+      The code above fetches our web page from the URL, and stores the result in a "response" object called r. 
+      That response object has a text attribute, which contains the same HTML code we saw when viewing the source from 
+      our web browser:
+                                        # print the first 500 characters of the HTML
+                                        print(r.text[0:500])
+      <!DOCTYPE html>  
+      <!--[if (gt IE 9)|!(IE)]> <!--><html lang="en" class="no-js page-interactive section-opinion page-theme-standard 
+      tone-opinion page-interactive-default limit-small layout-xlarge app-interactive" 
+      itemid="https://www.nytimes.com/interactive/2017/06/23/opinion/trumps-lies.html" 
+      itemtype="http://schema.org/NewsArticle" itemscope xmlns:og="http://opengraphprotocol.org/schema/"><!--<![endif]-->  
+      <!--[if IE 9]> <html lang="en" class="no-js ie9 lt-ie10 page-interactive section-opinion page 
+
+PARSING THE HTML USING BEAUTIFUL SOUP
+
+      We're going to parse the HTML using the Beautiful Soup 4 library.
+                                       from bs4 import BeautifulSoup
+                                       soup = BeautifulSoup(r.text, 'html.parser')
+      The code above parses the HTML (stored in r.text) into a special object called soup that the Beautiful Soup 
+      library understands. In other words, Beautiful Soup is reading the HTML and making sense of its structure.
+      Note that html.parser is the parser included with the Python standard library, though other parsers can be 
+      used by Beautiful Soup.
+
+COLLECTING ALL OF THE RECORDS
+      The Python code above is the standard code I use with every web scraping project.
+      Now, we're going to start taking advantage of the patterns we noticed in the article formatting to build our dataset.
+      Lets take a look at the article and compare it with the HTML.
+      
+      JAN. 21 “I wasn't a fan of Iraq. I didn't want to go into Iraq.” (He was for an invasion before he was against it.)  
+      JAN. 21 “A reporter for Time magazine — and I have been on their cover 14 or 15 times. I think we have the all-time 
+      record in the history of Time magazine.” (Trump was on the cover 11 times and Nixon appeared 55 times.)
+      JAN. 23 “Between 3 million and 5 million illegal votes caused me to lose the popular vote.” (There's no evidence of 
+      illegal voting.)  JAN. 25 “Now, the audience was the biggest ever. But this crowd was massive. Look how far back it 
+      goes. This crowd was massive.” (Official aerial photos show Obama's 2009 inauguration was much more heavily attended.)
+      
+      <span class="short-desc"><strong>Jan. 21&nbsp;</strong>“I wasn't a fan of Iraq. I didn't want to go into Iraq.” 
+      <span class="short-truth"><a href="https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-he-supported-
+      invading-iraq-on-the" target="_blank">(He was for an invasion before he was against it.)</a></span></span>&nbsp;&nbsp;
+      <span class="short-desc"><strong>Jan. 21&nbsp;</strong>“A reporter for Time magazine — and I have been on their cover 
+      14 or 15 times. I think we have the all-time record in the history of Time magazine.” <span class="short-truth">
+      <a href="http://nation.time.com/2013/11/06/10-things-you-didnt-know-about-time/" target="_blank">(Trump was on the 
+      cover 11 times and Nixon appeared 55 times.)</a></span></span>&nbsp;
+      
+      You might have noticed that each record has the following format:
+      <span class="short-desc"><strong> DATE </strong> LIE <span class="short-truth"><a href="URL"> EXPLANATION </a></span>
+      </span>
+      
+      There's an outer <span> tag, and then nested within it is a <strong> tag plus another <span> tag, which itself 
+      contains an <a> tag. All of these tags affect the formatting of the text. And because the New York Times wants each 
+      record to appear in a consistent way in your web browser, we know that each record will be tagged in a consistent way 
+      in the HTML. This is the pattern that allows us to build our dataset!
+      
+      Lets ask Beautiful Soup to find all of the records:
+                                          results = soup.find_all('span', attrs={'class':'short-desc'})
+      This code searches the soup object for all <span> tags with the attribute class="short-desc". It returns a 
+      special Beautiful Soup object containing the search results.'results' acts like a Python list, so we can check its 
+      length.
+                                          In[]: len(results)
+                                          Out[]: 116
+      There are 116 results, which seems reasonable given the length of the article.
+      We can also slice the object like a list, in order to examine the first three results:
+                                          results[0:3]
+      [<span class="short-desc"><strong>Jan. 21 </strong>“I wasn't a fan of Iraq. I didn't want to go into Iraq.” 
+      <span class="short-truth"><a href="https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-he-supported-
+      invading-iraq-on-the" target="_blank">(He was for an invasion before he was against it.)</a></span></span>,
+      <span class="short-desc"><strong>Jan. 21 </strong>“A reporter for Time magazine — and I have been on their cover 
+      14 or 15 times. I think we have the all-time record in the history of Time magazine.” <span class="short-truth">
+      <a href="http://nation.time.com/2013/11/06/10-things-you-didnt-know-about-time/" target="_blank">(Trump was on the 
+      cover 11 times and Nixon appeared 55 times.)</a></span></span>,
+      <span class="short-desc"><strong>Jan. 23 </strong>“Between 3 million and 5 million illegal votes caused me to lose
+      the popular vote.” <span class="short-truth"><a href="https://www.nytimes.com/2017/01/23/us/politics/donald-trump-
+      congress-democrats.html" target="_blank">(There's no evidence of illegal voting.)</a></span></span>]
+      
+      We'll also check that the last result in this object matches the last record in the article:
+                                          results[-1]
+      <span class="short-desc"><strong>July 19 </strong>“But the F.B.I. person really reports directly to the president of 
+      the United States, which is interesting.” <span class="short-truth"><a href="https://www.usatoday.com/story/news/
+      politics/onpolitics/2017/07/20/fbi-director-reports-justice-department-not-president/495094001/" target="_blank">
+      (He reports directly to the attorney general.)</a></span></span>
+      
+      We have now collected all 116 of the records, but we still need to separate each record into its four components 
+      (date, lie, explanation, and URL) in order to give the dataset some structure.
+      
+EXTRACTING THE DATE
+
+       We'll start by only working with the first record in the results object, and then later on we'll modify our code.
+                                          first_result = results[0]
+                                          first_result
+      <span class="short-desc"><strong>Jan. 21 </strong>“I wasn't a fan of Iraq. I didn't want to go into Iraq.” 
+      <span class="short-truth"><a href="https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-he-supported-
+      invading-iraq-on-the" target="_blank">(He was for an invasion before he was against it.)</a></span></span>
+      
+      Although first_result may look like a Python string, you'll notice that there are no quote marks around it. 
+      Instead, it's another special Beautiful Soup object (called a "Tag") that has specific methods and attributes.
+      
+      In order to locate the date, we can use its find() method to find a single tag that matches a specific pattern, 
+      in contrast to the find_all() method we used above to find all tags that match a pattern:
+                                          In[]: first_result.find('strong')
+                                          Out[]: <strong>Jan. 21 </strong>
+      This code searches first_result for the first instance of a <strong> tag, and again returns a Beautiful Soup 
+      "Tag" object (not a string).
+      Since we want to extract the text between the opening and closing tags, we can access its text attribute, 
+      which does in fact return a regular Python string:
+                                          In[]: first_result.find('strong').text
+                                          Out[]: 'Jan. 21\xa0' 
+      What is \xa0? You don't actually need to know this, but it's called an "escape sequence" that represents the &nbsp; 
+      character we saw earlier in the HTML source.
+      However, you do need to know that an escape sequence represents a single character within a string. 
+      Let's slice it off from the end of the string:
+                                          In[]: first_result.find('strong').text[0:-1]
+                                          Out[]: 'Jan. 21'
+      Finally, we're going to add the year, since we don't want our dataset to include ambiguous dates:
+                                          In[]: first_result.find('strong').text[0:-1] + ', 2017'
+                                          Out[]: 'Jan. 21, 2017'
+      
+EXTRACTING THE LIE
+
+      Let's take another look at first_result.
+                                          In[]: first_result
+      <span class="short-desc"><strong>Jan. 21 </strong>“I wasn't a fan of Iraq. I didn't want to go into Iraq.” 
+      <span class="short-truth"><a href="https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-he-supported-
+      invading-iraq-on-the" target="_blank">(He was for an invasion before he was against it.)</a></span></span>
+      
+      Our goal is to extract the two sentences about Iraq. Unfortunately, there isn't a pair of opening and closing tags 
+      that starts immediately before the lie and ends immediately after the lie. Therefore, we're going to have to use a 
+      different technique:
+                                           first_result.contents
+      [<strong>Jan. 21 </strong>,
+       "“I wasn't a fan of Iraq. I didn't want to go into Iraq.” ",
+        <span class="short-truth"><a href="https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-
+        he-supported-invading-iraq-on-the" target="_blank">(He was for an invasion before he was against it.)</a></span>]
+      
+      he first_result "Tag" has a contents attribute, which returns a Python list containing its "children". 
+      What are children? They are the Tags and strings that are nested within a Tag.
+      We can slice this lsit to extract the second element:
+                                           first_result.contents[1]
+                                           "“I wasn't a fan of Iraq. I didn't want to go into Iraq.” "
+      Finally, we'll slice off the curly quotation marks as well as the extra space at the end:
+                                           first_result.contents[1][1:-2]
+                                           "I wasn't a fan of Iraq. I didn't want to go into Iraq."
+
+EXTRACTING THE EXPLAINATION:
+
+      We have at least two options for how we extract the third component of the record, which is the writer's explanation 
+      of why the President's statement was a lie.The first option is to slice the contents attribute, like we did when 
+      extracting the lie:
+                                          first_result.contents[2]
+      <span class="short-truth"><a href="https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-he-supported-
+      invading-iraq-on-the" target="_blank">(He was for an invasion before he was against it.)</a></span>
+      
+      The second option is to search for the surrounding tag, like we did when extracting the date:
+                                          first_result.find('a')
+      <a href="https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-he-supported-invading-iraq-on-the" 
+      target="_blank">(He was for an invasion before he was against it.)</a>
+      
+      Either way, we can access the text attribute and then slice off the opening and closing parentheses:
+                                          first_result.find('a').text[1:-1]
+                                          'He was for an invasion before he was against it.'
+                                          
+EXTRACTING THE URL:
+
+      Let's examine the <a> tag within first_result:
+                                          first_result.find('a')
+      <a href="https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-he-supported-invading-iraq-on-the" 
+      target="_blank">(He was for an invasion before he was against it.)</a>
+      
+      So far, we have been extracting text that is between tags. 
+      In this case, the text we want to extract is located within the tag itself. 
+      Specifically, we want to access the value of the href attribute within the <a> tag.
+      
+      Beautiful Soup treats tag attributes and their values like key-value pairs in a dictionary: 
+      you put the attribute name in brackets (like a dictionary key), and you get back the attribute's value:
+                                          first_result.find('a')['href']
+      'https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-he-supported-invading-iraq-on-the'
+      
+RECAP - BEAUTIFUL SOUP METHODS AND ATTRIBUTES:
+      We can apply these two methods to either the initial soup object or a Tag object (such as first_result):
+              > find(): searches for the first matching tag, and returns a Tag object
+              > find_all(): searches for all matching tags, and returns a ResultSet object (which you can treat like a list 
+                            of Tags)
+      We can extract information from a Tag object (such as first_result) using these two attributes:
+              > text: extracts the text of a Tag, and returns a string
+              > contents: extracts the children of a Tag, and returns a list of Tags and strings
+              
+BUILDING THE DATASET:
+      Now that we've figured out how to extract the four components of first_result,
+      we can create a loop to repeat this process on all 116 results. 
+      We'll store the output in a list of tuples called records:
+                                          records = []
+                                          for result in results:
+                                                  date = result.find('strong').text[0:-1] + ', 2017'
+                                                  lie = result.content[1][1:-2]
+                                                  explanation = result.find('a').text[1:-1]
+                                                  url = result.find('a')['href']
+                                                  records.append((date, lie, explanation, url))
+      Since there were 116 results, we should have 116 records:
+                                          len(records)
+                                          116
+      Let's do a quick spot check of the first three records:
+                                          records[0:3]
+      [('Jan. 21, 2017',
+        "I wasn't a fan of Iraq. I didn't want to go into Iraq.",
+        'He was for an invasion before he was against it.',
+        'https://www.buzzfeed.com/andrewkaczynski/in-2002-donald-trump-said-he-supported-invading-iraq-on-the'),
+       ('Jan. 21, 2017',
+        'A reporter for Time magazine — and I have been on their cover 14 or 15 times. I think we have the all-time record in the history of Time magazine.',
+        'Trump was on the cover 11 times and Nixon appeared 55 times.',
+        'http://nation.time.com/2013/11/06/10-things-you-didnt-know-about-time/'),
+       ('Jan. 23, 2017',
+        'Between 3 million and 5 million illegal votes caused me to lose the popular vote.',
+        "There's no evidence of illegal voting.",
+        'https://www.nytimes.com/2017/01/23/us/politics/donald-trump-congress-democrats.html')]
+        
+APPLYING A TABULAR DATA STRUCTURE:
+        The last major step in this process is to apply a tabular data structure to our existing structure 
+        (which is a list of tuples). We're going to do this using the pandas library.
+        The primary data structure in pandas is the "DataFrame", which is suitable for tabular data with columns 
+        of different types, similar to an Excel spreadsheet or SQL table. We can convert our list of tuples into 
+        a DataFrame by passing it to the DataFrame constructor and specifying the desired column names:
+                                            import pandas as pd
+                                            df = pd.DataFrame(records, columns=['date','lie','explanation','url'])
+        The DataFrame includes a head() method, which allows you to examine the top of the DataFrame:
+                                            df.head()
+        The numbers on the left side of the DataFrame are known as the "index", which act as identifiers for the rows. 
+        Because we didn't specify an index, it was automatically assigned as the integers 0 to 115.
+        We notice that "January" is abbreviated, while "July" is not? It's best to format your data consistently, and 
+        so we're going to convert the date column to pandas' special "datetime" format:
+                                            df['date'] = pd.to_datetime(df['date'])
+        The code above converts the "date" column to datetime format, and then overwrites the existing "date" column. 
+        (Notice that we did not have to tell pandas that the column was originally in "MONTH DAY, YEAR" format - pandas 
+        just figured it out!)
+        
+EXPORTING THE DATA TO A CSV FILE:
+        Finally, we'll use pandas to export the DataFrame to a CSV (comma-separated value):
+                                             df.to_csv('trump_lies.csv', index = False, encoding = 'utf-8')
+        We set the index parameter to False to tell pandas that we don't need it to include the index 
+        (the integers 0 to 115) in the CSV file.
+        
+        the future, you can rebuild this DataFrame by reading the CSV file back into pandas:
+                                             df = pd.read_csv('trump_lies.csv', parse_dates=['date'], encoding='utf-8')
+                                             
+WEB SCRAPPING ADVICE:
+        > Web scraping works best with static, well-structured web pages. Dynamic or interactive content on a web page 
+          is often not accessible through the HTML source, which makes scraping it much harder!
+        > The HTML on a page you are scraping can change at any time, which may cause your scraper to stop working.
+        > If you are scraping a lot of pages from the same website (in rapid succession), it's best to insert delays 
+          in your code so that you don't overwhelm the website with requests.
+        > Before scraping a website, we should review its robots.txt file to check whether we are "allowed" to scrape 
+          their website.
+                                             
+                                            
+      
